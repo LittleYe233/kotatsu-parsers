@@ -79,6 +79,8 @@ manga source is available in the debug Kotatsu build.
 Once the parser is ready you can relocate your code into the `kotatsu-parsers` library project in a `site` package and
 create a Pull Request.
 
+If developing in this repository, you can execute `./gradlew kspKotlin` to make generated code available in code linting.
+
 ### Testing
 
 It is recommended that unit tests be run before submitting a PR.
