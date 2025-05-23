@@ -533,7 +533,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		val altTitles = doc.select(altTitleSelector).eachText().toSet()
 
 		// contentRating
-		val contentRating: ContentRating = doc.select(nsfwCheckSelector).let {
+		val contentRating: ContentRating = doc.selectFirst(nsfwCheckSelector).let {
 			when (it) {
 				null -> ContentRating.SAFE
 				else -> ContentRating.ADULT
