@@ -1,7 +1,5 @@
 package org.koitharu.kotatsu.parsers.site.zh
 
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
@@ -462,7 +460,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		}
 	}
 
-	protected open suspend fun parseChapters(doc: Document): List<MangaChapter> {
+	protected open fun parseChapters(doc: Document): List<MangaChapter> {
 		// Parse chapters of sections
 		var sectionTitles = doc.select(sectionTitlesSelector)
 		var sectionChapters: Elements?
@@ -672,7 +670,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		}
 	}
 
-	override suspend fun getDetails(manga: Manga): Manga = coroutineScope {
+	override suspend fun getDetails(manga: Manga): Manga {
 		// Parse HTML
 		val doc = webClient.httpGet(manga.publicUrl).parseHtml()
 
@@ -712,17 +710,17 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		val description = doc.selectFirst(descSelector)?.text()
 
 		// chapters
-		val chapters = async { parseChapters(doc) }
+		val chapters = parseChapters(doc)
 
 		// Return all
-		manga.copy(
+		return manga.copy(
 			altTitles = altTitles,
 			contentRating = contentRating,
 			tags = tags,
 			state = state,
 			authors = authors.toSet(),
 			description = description,
-			chapters = chapters.await(),
+			chapters = chapters,
 		)
 	}
 
