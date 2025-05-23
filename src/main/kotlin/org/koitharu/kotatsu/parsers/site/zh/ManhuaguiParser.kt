@@ -331,17 +331,17 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 			),
 			SearchCapability(
 				field = SearchableField.LANGUAGE,
-				criteriaTypes = setOf(QueryCriteria.Match::class),
+				criteriaTypes = setOf(QueryCriteria.Include::class),
 				isMultiple = false,
 			),
 			SearchCapability(
 				field = SearchableField.TAG,
-				criteriaTypes = setOf(QueryCriteria.Match::class),
+				criteriaTypes = setOf(QueryCriteria.Include::class),
 				isMultiple = false,
 			),
 			SearchCapability(
 				field = SearchableField.DEMOGRAPHIC,
-				criteriaTypes = setOf(QueryCriteria.Match::class),
+				criteriaTypes = setOf(QueryCriteria.Include::class),
 				isMultiple = false,
 			),
 			SearchCapability(
@@ -351,7 +351,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 			),
 			SearchCapability(
 				field = SearchableField.STATE,
-				criteriaTypes = setOf(QueryCriteria.Match::class),
+				criteriaTypes = setOf(QueryCriteria.Include::class),
 				isMultiple = false,
 			),
 		)
