@@ -1,6 +1,9 @@
 package org.koitharu.kotatsu.parsers.site.zh
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import okhttp3.Headers
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -29,12 +32,15 @@ import org.koitharu.kotatsu.parsers.model.search.QueryCriteria
 import org.koitharu.kotatsu.parsers.model.search.SearchCapability
 import org.koitharu.kotatsu.parsers.model.search.SearchableField
 import org.koitharu.kotatsu.parsers.site.zh.LZ4K.decompressFromBase64
+import org.koitharu.kotatsu.parsers.util.LinkResolver
+import org.koitharu.kotatsu.parsers.util.attrAsAbsoluteUrl
 import org.koitharu.kotatsu.parsers.util.attrAsRelativeUrl
 import org.koitharu.kotatsu.parsers.util.generateUid
 import org.koitharu.kotatsu.parsers.util.json.asTypedList
 import org.koitharu.kotatsu.parsers.util.mapChapters
 import org.koitharu.kotatsu.parsers.util.mapToSet
 import org.koitharu.kotatsu.parsers.util.parseHtml
+import org.koitharu.kotatsu.parsers.util.parseJson
 import org.koitharu.kotatsu.parsers.util.selectFirstOrThrow
 import org.koitharu.kotatsu.parsers.util.src
 import org.koitharu.kotatsu.parsers.util.toAbsoluteUrl
@@ -237,6 +243,16 @@ private object PACKERDecoder {
 	}
 }
 
+private data class PartialMangaDetails(
+	val altTitles: Set<String>,
+	val contentRating: ContentRating?,
+	val tags: Set<MangaTag>,
+	val state: MangaState?,
+	val authors: Set<String>,
+	val description: String?,
+	val chapters: List<MangaChapter>?,
+)
+
 /*******************************************************
  * Parser class
  ******************************************************/
@@ -356,6 +372,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 
 	protected open val listUrl = "/list"
 	protected open val searchUrl = "/s"
+	protected open val ratingUrl = "/tools/vote.ashx"
 	protected open val tagSelector = "div.filter-nav > .filter.genre > ul > li > a"
 	protected open val mangaSelector = "div.book-list > ul#contList > li"
 	protected open val mangaSearchPageSelector = "div.book-result > ul > li"
@@ -366,6 +383,8 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	protected open val tagsSelector = "ul.detail-list > li:nth-child(2) > span:first-child > a"
 	protected open val descSelector = "div.book-intro > #intro-all > p"
 	protected open val nsfwCheckSelector = "input#__VIEWSTATE"
+	protected open val titleResolveLinkSelector = "div.book-title h1"
+	protected open val coverSelector = "div.book-cover > p > img"
 
 	/**
 	 * @note There is no "section" (such as 单行本, 单话) concept in Kotatsu, so we just collect all chapters.
@@ -470,7 +489,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 			if (viewState == null) {
 				throw RuntimeException("Cannot find sections")
 			}
-			val viewStateStr = LZ4K.decompressFromBase64(viewState.attr("value"))
+			val viewStateStr = decompressFromBase64(viewState.attr("value"))
 			if (viewStateStr == null) {
 				throw RuntimeException("Cannot decompress __VIEWSTATE")
 			}
@@ -506,6 +525,62 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		return chapters
 	}
 
+	private suspend fun getPartialJSONDetailsByLink(link: HttpUrl): PartialMangaDetails {
+		// Parse HTML
+		val doc = webClient.httpGet(link.toString()).parseHtml()
+
+		// altTitles
+		val altTitles = doc.select(altTitleSelector).eachText().toSet()
+
+		// contentRating
+		val contentRating: ContentRating = doc.select(nsfwCheckSelector).let {
+			when (it) {
+				null -> ContentRating.SAFE
+				else -> ContentRating.ADULT
+			}
+		}
+
+		// tags
+		val tags = doc.select(tagsSelector).mapToSet { e ->
+			MangaTag(
+				title = e.text(),
+				key = e.attr("href").removePrefix("/list/").removeSuffix("/"),
+				source = source,
+			)
+		}
+
+		// state
+		val state = doc.selectFirst(stateSelector)?.className()?.let { className ->
+			when (className) {
+				"red" -> MangaState.ONGOING
+				"dgreen" -> MangaState.FINISHED
+				else -> null
+			}
+		}
+
+		// authors
+		val authors = doc.select(authorsSelector).eachText()
+
+		// description
+		val description = doc.selectFirst(descSelector)?.text()
+
+		// chapters
+		val chapters = parseChapters(doc)
+
+		return PartialMangaDetails(
+			altTitles = altTitles,
+			contentRating = contentRating,
+			tags = tags,
+			state = state,
+			authors = authors.toSet(),
+			description = description,
+			chapters = chapters,
+		)
+	}
+
+	private suspend fun getPartialJSONDetailsByUrl(url: String): PartialMangaDetails =
+		getPartialJSONDetailsByLink(url.toHttpUrl())
+
 	/*******************************************************
 	 * Class method overrides
 	 ******************************************************/
@@ -529,6 +604,70 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		availableDemographics = EnumSet.complementOf(EnumSet.of(Demographic.JOSEI)),
 		availableStates = EnumSet.of(MangaState.ONGOING, MangaState.FINISHED),
 	)
+
+	/**
+	 * This method is made for testing. It does little impact to basic usage without itself.
+	 */
+	override suspend fun resolveLink(resolver: LinkResolver, link: HttpUrl): Manga? = coroutineScope {
+		// Something easy
+		val url = link.encodedPath
+		val id = generateUid(url)
+		val publicUrl = url.toAbsoluteUrl(domain)
+		val source = source
+
+		// Async #1: We have handled some fields
+		val detailsAsync = async { getPartialJSONDetailsByLink(link) }
+
+		// Async #2: Now we need to handle the others
+		val pairAsync = async {
+			val doc = webClient.httpGet(link).parseHtml()
+			val title = doc.selectFirst(titleResolveLinkSelector)?.text() ?: ""
+			val coverUrl = doc.selectFirst(coverSelector)?.attrAsAbsoluteUrl("src")
+			Pair(title, coverUrl)
+		}
+
+		// Async #3: In detail page, rating is dynamically calculated from another response
+		val ratingAsync = async {
+			val bid = link.pathSegments[1]
+			val url = ratingUrl.toAbsoluteUrl(domain).addQueryParameters(
+				JSONObject().apply {
+					put("bid", bid)
+					put("act", "get")
+				},
+			)
+			val result = webClient.httpGet(url).parseJson()
+			require(result.optBoolean("success")) { "Rating XHR request is not successful" }
+			// Count of score 1, 2, 3, 4, 5, respectively
+			val a = result.optJSONObject("data")?.optInt("s1") ?: 0
+			val b = result.optJSONObject("data")?.optInt("s2") ?: 0
+			val c = result.optJSONObject("data")?.optInt("s3") ?: 0
+			val d = result.optJSONObject("data")?.optInt("s4") ?: 0
+			val e = result.optJSONObject("data")?.optInt("s5") ?: 0
+			(a + b * 2 + c * 3 + d * 4 + e * 5) / (a + b + c + d + e).toFloat() * 2
+		}
+
+		// Bundle all
+		val details = detailsAsync.await()
+		val (title, coverUrl) = pairAsync.await()
+		val rating = ratingAsync.await()
+
+		Manga(
+			id = id,
+			title = title,
+			url = url,
+			publicUrl = publicUrl,
+			rating = rating,
+			coverUrl = coverUrl,
+			source = source,
+			altTitles = details.altTitles,
+			contentRating = details.contentRating,
+			tags = details.tags,
+			state = details.state,
+			authors = details.authors,
+			description = details.description,
+			chapters = details.chapters,
+		)
+	}
 
 	override suspend fun getListPage(
 		query: MangaSearchQuery,
@@ -671,56 +810,16 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	}
 
 	override suspend fun getDetails(manga: Manga): Manga {
-		// Parse HTML
-		val doc = webClient.httpGet(manga.publicUrl).parseHtml()
+		val details = getPartialJSONDetailsByUrl(manga.publicUrl)
 
-		// altTitles
-		val altTitles = doc.select(altTitleSelector).eachText().toSet()
-
-		// contentRating
-		val contentRating: ContentRating = doc.select(nsfwCheckSelector).let {
-			when (it) {
-				null -> ContentRating.SAFE
-				else -> ContentRating.ADULT
-			}
-		}
-
-		// tags
-		val tags = doc.select(tagsSelector).mapToSet { e ->
-			MangaTag(
-				title = e.text(),
-				key = e.attr("href").removePrefix("/list/").removeSuffix("/"),
-				source = source,
-			)
-		}
-
-		// state
-		val state = doc.selectFirst(stateSelector)?.className()?.let { className ->
-			when (className) {
-				"red" -> MangaState.ONGOING
-				"dgreen" -> MangaState.FINISHED
-				else -> null
-			}
-		}
-
-		// authors
-		val authors = doc.select(authorsSelector).eachText()
-
-		// description
-		val description = doc.selectFirst(descSelector)?.text()
-
-		// chapters
-		val chapters = parseChapters(doc)
-
-		// Return all
 		return manga.copy(
-			altTitles = altTitles,
-			contentRating = contentRating,
-			tags = tags,
-			state = state,
-			authors = authors.toSet(),
-			description = description,
-			chapters = chapters,
+			altTitles = details.altTitles,
+			contentRating = details.contentRating,
+			tags = details.tags,
+			state = details.state,
+			authors = details.authors,
+			description = details.description,
+			chapters = details.chapters,
 		)
 	}
 
@@ -733,7 +832,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		if (result == null) {
 			throw RuntimeException("Cannot find chapter metadata in the page")
 		}
-		val metadataRaw = LZ4K.decompressFromBase64(result.groupValues[4])
+		val metadataRaw = decompressFromBase64(result.groupValues[4])
 		if (metadataRaw == null) {
 			throw RuntimeException("Cannot decompress chapter metadata")
 		}
