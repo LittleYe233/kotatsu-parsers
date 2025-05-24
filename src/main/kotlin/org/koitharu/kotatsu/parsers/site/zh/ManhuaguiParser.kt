@@ -341,10 +341,11 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 				field = SearchableField.TITLE_NAME,
 				criteriaTypes = setOf(QueryCriteria.Match::class),
 				isMultiple = false,
-				isExclusive = false,
+				/** @note: I think there is something wrong with the docstring of the field. */
+				isExclusive = true,
 			),
 			SearchCapability(
-				field = SearchableField.LANGUAGE,
+				field = SearchableField.ORIGINAL_LANGUAGE,
 				criteriaTypes = setOf(QueryCriteria.Include::class),
 				isMultiple = false,
 			),
@@ -415,10 +416,10 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 
 		is Locale -> when (this) {
 			Locale.JAPAN -> "japan" // 日本
-			Locale.TAIWAN -> "hongkong" // 港台
+			Locale.TRADITIONAL_CHINESE -> "hongkong" // 港台
 			Locale.ROOT -> "other" // 其他 (I do not know if it is sure to use it)
 			Locale.US -> "europe" // 欧美
-			Locale.CHINA -> "china" // 中国
+			Locale.SIMPLIFIED_CHINESE -> "china" // 内地
 			Locale.KOREA -> "korea" // 韩国
 			else -> null
 		}
@@ -598,7 +599,8 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 
 	override suspend fun getFilterOptions() = MangaListFilterOptions(
 		availableLocales = setOf(
-			Locale.JAPAN, Locale.TAIWAN, Locale.ROOT, Locale.US, Locale.CHINA, Locale.KOREA,
+			Locale.JAPAN, Locale.TRADITIONAL_CHINESE, Locale.ROOT,
+			Locale.US, Locale.SIMPLIFIED_CHINESE, Locale.KOREA,
 		),
 		availableTags = fetchAvailableTags(),
 		availableDemographics = EnumSet.complementOf(EnumSet.of(Demographic.JOSEI)),
@@ -695,7 +697,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 						val values = criterion.values
 						val param = values.first().toQueryParam()
 						when (field) {
-							SearchableField.LANGUAGE -> {
+							SearchableField.ORIGINAL_LANGUAGE -> {
 								queryLang = param
 							}
 
