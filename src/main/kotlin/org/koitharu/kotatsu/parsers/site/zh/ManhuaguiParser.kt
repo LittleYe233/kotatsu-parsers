@@ -402,7 +402,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	protected open val chapterViewStateSelector = "#__VIEWSTATE"
 	protected open val sectionChaptersSelector = ".chapter-list"
 	protected open val chaptersSelector = "li a"
-	protected open val stateSelector = "li.status > span > span:first-child"
+	protected open val stateSelector = "li.status > span > span"
 
 	override fun intercept(chain: Interceptor.Chain): Response {
 		val request = chain.request().newBuilder().headers(headers).build()
