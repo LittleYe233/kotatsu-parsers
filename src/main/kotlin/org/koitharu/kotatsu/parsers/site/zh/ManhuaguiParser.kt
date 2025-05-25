@@ -844,14 +844,13 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		val files = json.getJSONArray("files")
 		val semiFullUrl = json.getString("path").toAbsoluteUrl(imgServer)
 		val signature = json.getJSONObject("sl")
-		val previewFullUrl = (semiFullUrl + files[0]).addQueryParameters(signature)
 
 		return files.asTypedList<String>().map { it ->
 			val fullUrl = (semiFullUrl + it).addQueryParameters(signature)
 			MangaPage(
 				id = generateUid(fullUrl),
 				url = fullUrl,
-				preview = previewFullUrl,
+				preview = fullUrl,
 				source = source,
 			)
 		}
