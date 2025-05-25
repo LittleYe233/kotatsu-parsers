@@ -222,16 +222,15 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 
 	override val configKeyDomain = ConfigKey.Domain("www.manhuagui.com")
 
-	// There are many subdomains: us, us1, us2, eu, eu1, eu2. Just choose one you like.
 	protected val configKeyImgServer = ConfigKey.PreferredImageServer(
 		presetValues = arrayOf("us", "us2", "us3", "eu", "eu2", "eu3").associateWith { it },
 		defaultValue = "us",
 	)
 
 	val imgServer = config[configKeyImgServer]
-		?.takeIf { it.isNotEmpty() } // if not null or empty, proceed
-		?.let { "${it}.hamreus.com" } // concat full domain
-		?: domain // otherwise, fallback to domain
+		?.takeIf { it.isNotEmpty() }
+		?.let { "${it}.hamreus.com" }
+		?: domain
 
 	protected val uaList = arrayOf(
 		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.2651.70 Safari/537.36 Edg/127.0.2651.70",
@@ -253,7 +252,6 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		.add("User-Agent", config[configKeyUserAgent])
 		.add("Referer", "https://${domain}")
 		.add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		// .add("Accept-Encoding", "gzip, deflate, br, zstd")
 		.add("Accept-Language", "en-US,en;q=0.7,zh-CN;q=0.3")
 		.add("Cache-Control", "no-cache")
 		.add("Pragma", "no-cache")
@@ -326,18 +324,6 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	protected val nsfwCheckSelector = "input#__VIEWSTATE"
 	protected val titleResolveLinkSelector = "div.book-title h1"
 	protected val coverSelector = "div.book-cover > p > img"
-
-	/**
-	 * @note There is no "section" (such as 单行本, 单话) concept in Kotatsu, so we just collect all chapters.
-	 *
-	 * @note For SFW works, chapters are easy to parse. But for NSFW ones, it should be a little
-	 * more tricky. So it needs a simple check.
-	 *
-	 * @note Also note that, a section may contains SEVERAL <ul>'s due to pagination, and the chapter list in every
-	 * <ul> is reversed. It should be specially handled.
-	 *
-	 * @test https://www.manhuagui.com/comic/54020/
-	 */
 	protected val sectionTitlesSelector = ".chapter h4 span"
 	protected val sectionTitlesAltSelector = "h4 span"
 	protected val chapterViewStateSelector = "#__VIEWSTATE"
@@ -394,7 +380,6 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		else -> null
 	}
 
-	/** @warn It won't do any sanity check. */
 	private fun String.addQueryParameters(params: JSONObject): String {
 		val builder = this.toHttpUrl().newBuilder()
 		val keys = params.keys()
@@ -547,9 +532,6 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		availableStates = EnumSet.of(MangaState.ONGOING, MangaState.FINISHED),
 	)
 
-	/**
-	 * This method is made for testing. It does little impact to basic usage without itself.
-	 */
 	override suspend fun resolveLink(resolver: LinkResolver, link: HttpUrl): Manga? = coroutineScope {
 		// Something easy
 		val url = link.encodedPath
