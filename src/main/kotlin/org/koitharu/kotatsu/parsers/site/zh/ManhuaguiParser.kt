@@ -111,13 +111,14 @@ private object LZ4K {
 		var numBits = 3
 		var enlargeIn = 4
 		var dictSize = 4
-		var next: Int = 0
+		var next: Int
+
 		fun doPower(initBits: Int, initPower: Int, initMaxPowerFactor: Int, mode: Int = 0) {
 			bits = initBits
 			maxpower = initMaxPowerFactor.power()
 			power = initPower
 			while (power != maxpower) {
-				resb = data.value.toInt() and data.position
+				resb = data.value.code and data.position
 				data.position = data.position shr 1
 				if (data.position == 0) {
 					data.position = resetValue
@@ -143,6 +144,7 @@ private object LZ4K {
 				numBits++
 			}
 		}
+
 		doPower(bits, 1, 2)
 		next = bits
 		when (next) {
@@ -177,8 +179,6 @@ private object LZ4K {
 			w = entry
 			checkEnlargeIn()
 		}
-
-
 	}
 
 	fun decompressFromBase64(input: String) = when {
@@ -268,7 +268,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	override val configKeyDomain = ConfigKey.Domain("www.manhuagui.com")
 
 	// There are many subdomains: us, us1, us2, eu, eu1, eu2. Just choose one you like.
-	protected open val configKeyImgServer = ConfigKey.PreferredImageServer(
+	protected val configKeyImgServer = ConfigKey.PreferredImageServer(
 		presetValues = arrayOf("us", "us2", "us3", "eu", "eu2", "eu3").associateWith { it },
 		defaultValue = "us",
 	)
@@ -285,7 +285,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	 * ua_generator.generate(device='desktop', browser=('chrome', 'edge', 'firefox')).text
 	 * ```
 	 */
-	protected open val uaList = arrayOf(
+	protected val uaList = arrayOf(
 		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.2651.70 Safari/537.36 Edg/127.0.2651.70",
 		"Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.1774.54 Safari/537.36 Edg/113.0.1774.54",
 		"Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.5615.193 Safari/537.36",
@@ -306,10 +306,10 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	 *
 	 * @see [uaList]
 	 */
-	protected open val configKeyUserAgent: ConfigKey.UserAgent
+	protected val configKeyUserAgent: ConfigKey.UserAgent
 		get() = ConfigKey.UserAgent(uaList.random())
 
-	protected open val headers = Headers.Builder()
+	protected val headers = Headers.Builder()
 		.add("User-Agent", config[configKeyUserAgent])
 		.add("Referer", "https://${domain}")
 		.add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
@@ -371,21 +371,21 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 			),
 		)
 
-	protected open val listUrl = "/list"
-	protected open val searchUrl = "/s"
-	protected open val ratingUrl = "/tools/vote.ashx"
-	protected open val tagSelector = "div.filter-nav > .filter.genre > ul > li > a"
-	protected open val mangaSelector = "div.book-list > ul#contList > li"
-	protected open val mangaSearchPageSelector = "div.book-result > ul > li"
-	protected open val ratingSelector = "span.updateon > em"
-	protected open val ratingSearchPageSelector = "div.book-score > p:first-child > strong"
-	protected open val altTitleSelector = ".book-title h2" // Assume that there is one at most
-	protected open val authorsSelector = "a[href^=\"/author\"]"
-	protected open val tagsSelector = "ul.detail-list > li:nth-child(2) > span:first-child > a"
-	protected open val descSelector = "div.book-intro > #intro-all > p"
-	protected open val nsfwCheckSelector = "input#__VIEWSTATE"
-	protected open val titleResolveLinkSelector = "div.book-title h1"
-	protected open val coverSelector = "div.book-cover > p > img"
+	protected val listUrl = "/list"
+	protected val searchUrl = "/s"
+	protected val ratingUrl = "/tools/vote.ashx"
+	protected val tagSelector = "div.filter-nav > .filter.genre > ul > li > a"
+	protected val mangaSelector = "div.book-list > ul#contList > li"
+	protected val mangaSearchPageSelector = "div.book-result > ul > li"
+	protected val ratingSelector = "span.updateon > em"
+	protected val ratingSearchPageSelector = "div.book-score > p:first-child > strong"
+	protected val altTitleSelector = ".book-title h2" // Assume that there is one at most
+	protected val authorsSelector = "a[href^=\"/author\"]"
+	protected val tagsSelector = "ul.detail-list > li:nth-child(2) > span:first-child > a"
+	protected val descSelector = "div.book-intro > #intro-all > p"
+	protected val nsfwCheckSelector = "input#__VIEWSTATE"
+	protected val titleResolveLinkSelector = "div.book-title h1"
+	protected val coverSelector = "div.book-cover > p > img"
 
 	/**
 	 * @note There is no "section" (such as 单行本, 单话) concept in Kotatsu, so we just collect all chapters.
@@ -398,12 +398,12 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	 *
 	 * @test https://www.manhuagui.com/comic/54020/
 	 */
-	protected open val sectionTitlesSelector = ".chapter h4 span"
-	protected open val sectionTitlesAltSelector = "h4 span"
-	protected open val chapterViewStateSelector = "#__VIEWSTATE"
-	protected open val sectionChaptersSelector = ".chapter-list"
-	protected open val chaptersSelector = "li a"
-	protected open val stateSelector = "li.status > span > span"
+	protected val sectionTitlesSelector = ".chapter h4 span"
+	protected val sectionTitlesAltSelector = "h4 span"
+	protected val chapterViewStateSelector = "#__VIEWSTATE"
+	protected val sectionChaptersSelector = ".chapter-list"
+	protected val chaptersSelector = "li a"
+	protected val stateSelector = "li.status > span > span"
 
 	override fun intercept(chain: Interceptor.Chain): Response {
 		val request = chain.request().newBuilder().headers(headers).build()
@@ -466,7 +466,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		return builder.build().toString()
 	}
 
-	protected open suspend fun fetchAvailableTags(): Set<MangaTag> {
+	protected suspend fun fetchAvailableTags(): Set<MangaTag> {
 		val doc = webClient.httpGet("https://${domain}${listUrl}").parseHtml()
 		val tags = doc.select(tagSelector).drop(1) // The first one means "all". Need to be dropped.
 		return tags.mapToSet { a ->
@@ -480,7 +480,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		}
 	}
 
-	protected open fun parseChapters(doc: Document): List<MangaChapter> {
+	protected fun parseChapters(doc: Document): List<MangaChapter> {
 		// Parse chapters of sections
 		var sectionTitles = doc.select(sectionTitlesSelector)
 		var sectionChapters: Elements?
