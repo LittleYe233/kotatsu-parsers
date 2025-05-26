@@ -1,9 +1,6 @@
 package org.koitharu.kotatsu.parsers.site.zh
 
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import okhttp3.Headers
-import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -35,7 +32,6 @@ import org.koitharu.kotatsu.parsers.util.mapChapters
 import org.koitharu.kotatsu.parsers.util.mapToSet
 import org.koitharu.kotatsu.parsers.util.oneOrThrowIfMany
 import org.koitharu.kotatsu.parsers.util.parseHtml
-import org.koitharu.kotatsu.parsers.util.parseJson
 import org.koitharu.kotatsu.parsers.util.selectFirstOrThrow
 import org.koitharu.kotatsu.parsers.util.selectOrThrow
 import org.koitharu.kotatsu.parsers.util.src
@@ -329,85 +325,6 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 		}
 	}
 
-	private suspend fun getDetailsByLink(link: HttpUrl): Manga? = coroutineScope {
-		val url = link.encodedPath
-		val id = generateUid(url)
-		val publicUrl = url.toAbsoluteUrl(domain)
-		val source = source
-
-		val detailsAsync = async {
-			val doc = webClient.httpGet(link).parseHtml()
-
-			val title = doc.selectFirst("div.book-title h1")?.text() ?: ""
-			val coverUrl = doc.selectFirst("div.book-cover > p > img")?.src()?.toAbsoluteUrl(imgServer)
-			val altTitles = doc.select(".book-title h2").eachText().toSet()
-			val contentRating: ContentRating = doc.selectFirst("input#__VIEWSTATE").let {
-				when (it) {
-					null -> ContentRating.SAFE
-					else -> ContentRating.ADULT
-				}
-			}
-			val tags = doc.select("ul.detail-list > li:nth-child(2) > span:first-child > a").mapToSet { e ->
-				MangaTag(
-					title = e.text(),
-					key = e.attr("href").removePrefix(listUrl).removeSurrounding("/"),
-					source = source,
-				)
-			}
-			val state = doc.selectFirst("li.status > span > span")?.className()?.let { className ->
-				when (className) {
-					"red" -> MangaState.ONGOING
-					"dgreen" -> MangaState.FINISHED
-					else -> null
-				}
-			}
-			val authors = doc.select("a[href^=\"/author\"]").eachText().toSet()
-			val description = doc.selectFirst("div.book-intro > #intro-all > p")?.text()
-			val chapters = parseChapters(doc)
-
-			Manga(
-				id = id,
-				title = title,
-				altTitles = altTitles,
-				url = url,
-				publicUrl = publicUrl,
-				rating = 0f, // fetched afterwards
-				contentRating = contentRating,
-				coverUrl = coverUrl,
-				tags = tags,
-				state = state,
-				authors = authors,
-				description = description,
-				chapters = chapters,
-				source = source,
-			)
-		}
-
-		val ratingAsync = async {
-			val bid = link.pathSegments[1]
-			val url = ratingUrl.toAbsoluteUrl(domain).addQueryParameters(
-				JSONObject().apply {
-					put("bid", bid)
-					put("act", "get")
-				},
-			)
-			val result = webClient.httpGet(url).parseJson()
-			require(result.optBoolean("success")) { "Rating XHR request is not successful" }
-			// Count of score 1, 2, 3, 4, 5, respectively
-			val a = result.optJSONObject("data")?.optInt("s1") ?: 0
-			val b = result.optJSONObject("data")?.optInt("s2") ?: 0
-			val c = result.optJSONObject("data")?.optInt("s3") ?: 0
-			val d = result.optJSONObject("data")?.optInt("s4") ?: 0
-			val e = result.optJSONObject("data")?.optInt("s5") ?: 0
-			(a + b * 2 + c * 3 + d * 4 + e * 5) / (a + b + c + d + e).toFloat() * 2
-		}
-
-		val details = detailsAsync.await()
-		val rating = ratingAsync.await()
-
-		details.copy(rating = rating)
-	}
-
 	private fun parseChapters(doc: Document, url: String? = null): List<MangaChapter> {
 		// Parse chapters of sections
 		val (sectionTitles, sectionChapters) = doc.selectFirst("#__VIEWSTATE").let {
@@ -543,9 +460,41 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 	}
 
 	override suspend fun getDetails(manga: Manga): Manga {
-		return getDetailsByLink(manga.publicUrl.toHttpUrl()) ?: throw ParseException(
-			"Cannot resolve link",
-			manga.publicUrl,
+		val doc = webClient.httpGet(manga.publicUrl).parseHtml()
+
+		val altTitles = doc.select(".book-title h2").eachText().toSet()
+		val contentRating: ContentRating = doc.selectFirst("input#__VIEWSTATE").let {
+			when (it) {
+				null -> ContentRating.SAFE
+				else -> ContentRating.ADULT
+			}
+		}
+		val tags = doc.select("ul.detail-list > li:nth-child(2) > span:first-child > a").mapToSet { e ->
+			MangaTag(
+				title = e.text(),
+				key = e.attr("href").removePrefix(listUrl).removeSurrounding("/"),
+				source = source,
+			)
+		}
+		val state = doc.selectFirst("li.status > span > span")?.className()?.let { className ->
+			when (className) {
+				"red" -> MangaState.ONGOING
+				"dgreen" -> MangaState.FINISHED
+				else -> null
+			}
+		}
+		val authors = doc.select("a[href^=\"/author\"]").eachText().toSet()
+		val description = doc.selectFirst("div.book-intro > #intro-all > p")?.text()
+		val chapters = parseChapters(doc)
+
+		return manga.copy(
+			altTitles = altTitles,
+			contentRating = contentRating,
+			tags = tags,
+			state = state,
+			authors = authors,
+			description = description,
+			chapters = chapters,
 		)
 	}
 
