@@ -64,6 +64,7 @@ internal class ManhuaguiParser(context: MangaLoaderContext) :
 
 	override fun getRequestHeaders(): Headers = super.getRequestHeaders().newBuilder()
 		.add("Referer", "https://$domain")
+		.add("Accept-Encoding", "identity")
 		.build()
 
     	override val defaultSortOrder: SortOrder
